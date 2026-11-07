@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 
 CELL_W = 70
 CELL_H = 60
@@ -24,7 +24,7 @@ root.title("Занятость залов")
 hall_var = tk.StringVar(value=halls[0])
 org_var = tk.StringVar(value=orgs[0])
 event_var = tk.StringVar()
-info_var = tk.StringVar(value="Время не выбрано")
+info_var = tk.StringVar()
 
 
 def time_str(i):
@@ -32,16 +32,45 @@ def time_str(i):
     return f"{t // 60:02d}:{t % 60:02d}"
 
 
+def duration_str(cells):
+    minutes = cells * 15
+    return f"{minutes // 60} ч. {minutes % 60} мин."
+
+
+def update_info():
+    org = org_var.get().strip()
+    if org == "":
+        org = "не выбрана"
+    if start_cell is None:
+        info_var.set(f"Организация: {org} | Время: не выбрано")
+    else:
+        info_var.set(f"Организация: {org} | Время: {time_str(start_cell)} - {time_str(end_cell + 1)} ({duration_str(end_cell - start_cell + 1)})")
+
+
+def find_booking(i):
+    for n, b in enumerate(bookings):
+        if b["hall"] == hall_var.get() and b["start"] <= i < b["end"]:
+            return n
+    return None
+
+
+def is_busy(a, b):
+    for k in range(a, b + 1):
+        if find_booking(k) is not None:
+            return True
+    return False
+
+
 def draw():
     canvas.delete("all")
     for i in range(48):
         x = 10 + (i % COLS) * CELL_W
         y = 10 + (i // COLS) * (CELL_H + 10)
+        n = find_booking(i)
         color = "#b7e4b7"
-        for b in bookings:
-            if b["hall"] == hall_var.get() and b["start"] <= i < b["end"]:
-                color = "#e05555"
-        if start_cell is not None and start_cell <= i <= end_cell:
+        if n is not None:
+            color = "#e05555"
+        elif start_cell is not None and start_cell <= i <= end_cell:
             color = "#ffe066"
         canvas.create_rectangle(x, y, x + CELL_W, y + CELL_H, fill=color, outline="gray")
         canvas.create_text(x + 3, y + 3, text=time_str(i), anchor="nw", font=("Arial", 7))
@@ -60,18 +89,19 @@ def on_click(event):
         return
     i = r * COLS + c
     if picking:
-        if i < start_cell:
-            end_cell = start_cell
-            start_cell = i
-        else:
-            end_cell = i
+        a = min(start_cell, i)
+        b = max(start_cell, i)
+        if is_busy(a, b):
+            messagebox.showwarning("Ошибка", "В выбранном интервале есть занятое время")
+            return
+        start_cell = a
+        end_cell = b
         picking = False
     else:
         start_cell = i
         end_cell = i
         picking = True
-    minutes = (end_cell - start_cell + 1) * 15
-    info_var.set(f"Организация: {org_var.get()} | Время: {time_str(start_cell)} - {time_str(end_cell + 1)} ({minutes} мин.)")
+    update_info()
     draw()
 
 
@@ -113,6 +143,9 @@ tk.Entry(form, textvariable=event_var, width=30).grid(row=0, column=1, padx=5)
 tk.Button(form, text="Утвердить бронь", command=book).grid(row=0, column=2, padx=5)
 tk.Label(form, textvariable=info_var).grid(row=1, column=0, columnspan=3, pady=5)
 
+org_var.trace_add("write", lambda *args: update_info())
+
 draw()
+update_info()
 
 root.mainloop()
